@@ -1,5 +1,5 @@
 #
-# NOTE: THIS DOCKERFILE IS GENERATED VIA "make update"! PLEASE DO NOT EDIT IT DIRECTLY.
+# NOTE: THIS DOCKERFILE IS GENERATED VIA "apply-templates.sh"! PLEASE DO NOT EDIT IT DIRECTLY.
 #
 
 # "Experimental"; solely for testing purposes. Anticipate frequent changes!
@@ -8,12 +8,12 @@
 ARG DOCKER_CMAKE_BUILD_TYPE=Release
 ARG CGAL_GIT_BRANCH=main
 ARG NPROC=
-FROM docker.io/postgres:16-bullseye as builder
+FROM docker.io/postgres:17-bullseye as builder
 
 ARG NPROC
 
 LABEL maintainer="PostGIS Project - https://postgis.net" \
-      org.opencontainers.image.description="PostGIS - master  spatial database extension with PostgreSQL 16 bullseye" \
+      org.opencontainers.image.description="PostGIS - master  spatial database extension with PostgreSQL 17 bullseye" \
       org.opencontainers.image.source="https://github.com/postgis/docker-postgis"
 
 WORKDIR /
@@ -272,7 +272,7 @@ RUN set -ex \
 # -------------------------------------------
 # STAGE  final
 # -------------------------------------------
-FROM docker.io/postgres:16-bullseye
+FROM docker.io/postgres:17-bullseye
 
 ARG NPROC
 ARG DOCKER_CMAKE_BUILD_TYPE
@@ -403,9 +403,9 @@ RUN set -ex \
     && mkdir /tempdb \
     && chown -R postgres:postgres /tempdb \
     && su postgres -c 'pg_ctl -D /tempdb init' \
-    && su postgres -c 'pg_ctl -D /tempdb -c -l /tmp/logfile -o '-F' start ' \
+    && su postgres -c 'pg_ctl -D /tempdb -c -l /tmp/logfile -o "-F --jit=off" start ' \
     && ldconfig \
-    && cd regress \
+    && cd /usr/src/postgis/regress \
     && make -j${NPROC:-$(nproc)} check RUNTESTFLAGS="--extension --verbose" PGUSER=postgres \
     \
     && su postgres -c 'psql    -c "CREATE EXTENSION IF NOT EXISTS postgis;"' \

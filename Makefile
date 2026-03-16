@@ -1,151 +1,136 @@
+# Docker PostGIS - Multi-arch Build System
+#
+# Uses two-level directory structure: <version>/<variant>/Dockerfile
+# Each variant directory contains a 'tags' file with space-separated Docker tags.
+#
+# Configuration via .env file or environment variables:
+#   REGISTRY  - Container registry (default: ghcr.io)
+#   REPO_NAME - Repository owner (default: jensenbox)
+#   IMAGE_NAME - Image name (default: docker-postgis)
 
-# When processing the rules for tagging and pushing container images with the
-# "latest" tag, the following variable will be the version that is considered
-# to be the latest.
-LATEST_VERSION=17-3.5
+-include .env
+export
 
-# The following flags are set based on VERSION and VARIANT environment variables
-# that may have been specified, and are used by rules to determine which
-# versions/variants are to be processed.  If no VERSION or VARIANT environment
-# variables were specified, process everything (the default).
-do_default=true
-do_alpine=true
+REGISTRY   ?= ghcr.io
+REPO_NAME  ?= jensenbox
+IMAGE_NAME ?= docker-postgis
 
-# The following logic evaluates VERSION and VARIANT variables that may have
-# been previously specified, and modifies the "do" flags depending on the values.
-# The VERSIONS variable is also set to contain the version(s) to be processed.
-ifdef VERSION
-    VERSIONS=$(VERSION) # If a version was specified, VERSIONS only contains the specified version
-    ifdef VARIANT       # If a variant is specified, unset all do flags and allow subsequent logic to set them again where appropriate
-        do_default=false
-        do_alpine=false
-        ifeq ($(VARIANT),default)
-            do_default=true
-        endif
-        ifeq ($(VARIANT),alpine)
-            do_alpine=true
-        endif
-    endif
-    ifeq ("$(wildcard $(VERSION)/alpine)","") # If no alpine subdirectory exists, don't process the alpine version
-        do_alpine=false
-    endif
-else # If no version was specified, VERSIONS should contain all versions
-    VERSIONS = $(foreach df,$(wildcard */Dockerfile),$(df:%/Dockerfile=%))
-endif
+DOCKER ?= docker
+GIT    ?= git
 
-# The "latest" tag will only be provided for default images (no variant) so
-# only define the dependencies when the default image will be built.
-ifeq ($(do_default),true)
-    BUILD_LATEST_DEP=build-$(LATEST_VERSION)
-    PUSH_LATEST_DEP=push-$(LATEST_VERSION)
-    PUSH_DEP=push-latest $(PUSH_LATEST_DEP)
-    # The "latest" tag shouldn't be processed if a VERSION was explicitly
-    # specified but does not correspond to the latest version.
-    ifdef VERSION
-        ifneq ($(VERSION),$(LATEST_VERSION))
-           PUSH_LATEST_DEP=
-           BUILD_LATEST_DEP=
-           PUSH_DEP=
-        endif
-    endif
-endif
+OFFIMG_LOCAL_CLONE ?= $(HOME)/official-images
+OFFIMG_REPO_URL    ?= https://github.com/docker-library/official-images.git
 
-# The repository and image names default to the official but can be overriden
-# via environment variables.
-REPO_NAME  ?= postgis
-IMAGE_NAME ?= postgis
+FULL_IMAGE = $(REGISTRY)/$(REPO_NAME)/$(IMAGE_NAME)
 
-DOCKER=docker
-DOCKERHUB_DESC_IMG=peterevans/dockerhub-description:4
+# Auto-discover version/variant pairs from filesystem
+DOCKERFILE_DIRS := $(sort $(shell find . -mindepth 3 -maxdepth 3 -name Dockerfile -not -path './examples/*' -printf '%h\n' 2>/dev/null | sed 's|^./||'))
+VERSIONS := $(sort $(shell echo '$(DOCKERFILE_DIRS)' | tr ' ' '\n' | cut -d'/' -f1 | sort -u))
 
-GIT=git
-OFFIMG_LOCAL_CLONE=$(HOME)/official-images
-OFFIMG_REPO_URL=https://github.com/docker-library/official-images.git
+.DEFAULT_GOAL := help
 
 
-build: $(foreach version,$(VERSIONS),build-$(version))
+### GENERATE ###
 
-all: update build test
+generate:
+	@echo "Generating Dockerfiles from versions.json..."
+	./apply-templates.sh
 
-update:
-	$(DOCKER) run --rm -v $$(pwd):/work -w /work docker.io/buildpack-deps ./update.sh
+### BUILD ###
 
-
-### RULES FOR BUILDING ###
-
-define build-version
-build-$1:
-ifeq ($(do_default),true)
-	$(DOCKER) build --pull -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1) $1
-	$(DOCKER) images          $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)
-endif
-ifeq ($(do_alpine),true)
-ifneq ("$(wildcard $1/alpine)","")
-	$(DOCKER) build --pull -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine $1/alpine
-	$(DOCKER) images          $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine
-endif
-endif
+define build-target
+build-$(1):
+	@echo "==> Building $(1) ..."
+	$(DOCKER) build --pull \
+		$(shell cat $(1)/tags 2>/dev/null | tr ' ' '\n' | sed 's|.*|-t $(FULL_IMAGE):&|' | tr '\n' ' ') \
+		$(1)
+	@echo "==> Built: $$(cat $(1)/tags 2>/dev/null)"
 endef
-$(foreach version,$(VERSIONS),$(eval $(call build-version,$(version))))
+$(foreach dir,$(DOCKERFILE_DIRS),$(eval $(call build-target,$(dir))))
+
+# Build all
+build: $(foreach dir,$(DOCKERFILE_DIRS),build-$(dir))
 
 
-## RULES FOR TESTING ###
+### TEST ###
 
 test-prepare:
 ifeq ("$(wildcard $(OFFIMG_LOCAL_CLONE))","")
 	$(GIT) clone $(OFFIMG_REPO_URL) $(OFFIMG_LOCAL_CLONE)
+else
+	cd $(OFFIMG_LOCAL_CLONE) && $(GIT) pull origin master
 endif
 
-test: $(foreach version,$(VERSIONS),test-$(version))
-
-define test-version
-test-$1: test-prepare build-$1
-ifeq ($(do_default),true)
-	$(OFFIMG_LOCAL_CLONE)/test/run.sh -c $(OFFIMG_LOCAL_CLONE)/test/config.sh -c test/postgis-config.sh $(REPO_NAME)/$(IMAGE_NAME):$(version)
-endif
-ifeq ($(do_alpine),true)
-ifneq ("$(wildcard $1/alpine)","")
-	$(OFFIMG_LOCAL_CLONE)/test/run.sh -c $(OFFIMG_LOCAL_CLONE)/test/config.sh -c test/postgis-config.sh $(REPO_NAME)/$(IMAGE_NAME):$(version)-alpine
-endif
-endif
+define test-target
+test-$(1): test-prepare build-$(1)
+	@echo "==> Testing $(1) ..."
+	$(OFFIMG_LOCAL_CLONE)/test/run.sh \
+		-c $(OFFIMG_LOCAL_CLONE)/test/config.sh \
+		-c test/postgis-config.sh \
+		$(FULL_IMAGE):$$(cat $(1)/tags | cut -d' ' -f1)
 endef
-$(foreach version,$(VERSIONS),$(eval $(call test-version,$(version))))
+$(foreach dir,$(DOCKERFILE_DIRS),$(eval $(call test-target,$(dir))))
+
+# Test all
+test: $(foreach dir,$(DOCKERFILE_DIRS),test-$(dir))
 
 
-### RULES FOR TAGGING ###
+### PUSH ###
 
-tag-latest: $(BUILD_LATEST_DEP)
-	$(DOCKER) image tag $(REPO_NAME)/$(IMAGE_NAME):$(LATEST_VERSION) $(REPO_NAME)/$(IMAGE_NAME):latest
-
-
-### RULES FOR PUSHING ###
-
-push: $(foreach version,$(VERSIONS),push-$(version)) $(PUSH_DEP)
-
-define push-version
-push-$1: test-$1
-ifeq ($(do_default),true)
-	$(DOCKER) image push $(REPO_NAME)/$(IMAGE_NAME):$(version)
-endif
-ifeq ($(do_alpine),true)
-ifneq ("$(wildcard $1/alpine)","")
-	$(DOCKER) image push $(REPO_NAME)/$(IMAGE_NAME):$(version)-alpine
-endif
-endif
+define push-target
+push-$(1): test-$(1)
+	@echo "==> Pushing $(1) ..."
+	@for tag in $$(cat $(1)/tags); do \
+		echo "  push: $(FULL_IMAGE):$$tag"; \
+		$(DOCKER) image push $(FULL_IMAGE):$$tag; \
+	done
 endef
-$(foreach version,$(VERSIONS),$(eval $(call push-version,$(version))))
+$(foreach dir,$(DOCKERFILE_DIRS),$(eval $(call push-target,$(dir))))
 
-push-latest: tag-latest $(PUSH_LATEST_DEP)
-	$(DOCKER) image push $(REPO_NAME)/$(IMAGE_NAME):latest
-	@$(DOCKER) run -v "$(PWD)":/workspace \
-                      -e DOCKERHUB_USERNAME='$(DOCKERHUB_USERNAME)' \
-                      -e DOCKERHUB_PASSWORD='$(DOCKERHUB_ACCESS_TOKEN)' \
-                      -e DOCKERHUB_REPOSITORY='$(REPO_NAME)/$(IMAGE_NAME)' \
-                      -e README_FILEPATH='/workspace/README.md' $(DOCKERHUB_DESC_IMG)
+# Push all
+push: $(foreach dir,$(DOCKERFILE_DIRS),push-$(dir))
 
 
-.PHONY: build all update test-prepare test tag-latest push push-latest \
-        $(foreach version,$(VERSIONS),build-$(version)) \
-        $(foreach version,$(VERSIONS),test-$(version)) \
-        $(foreach version,$(VERSIONS),push-$(version))
+### VERSION CHECK ###
 
+check_version:
+	@echo "Checking versions.json..."
+	@jq empty versions.json && echo "versions.json is valid JSON" || (echo "ERROR: invalid versions.json" && exit 1)
+
+
+### LINT ###
+
+lint:
+	shellcheck *.sh
+
+
+### HELP ###
+
+help:
+	@echo "Docker PostGIS Multi-Arch Build System"
+	@echo ""
+	@echo "Registry: $(FULL_IMAGE)"
+	@echo ""
+	@echo "Targets:"
+	@echo "  generate     - Generate Dockerfiles from versions.json"
+	@echo "  build        - Build all images"
+	@echo "  test         - Test all images"
+	@echo "  push         - Push all images"
+	@echo "  check_version - Validate versions.json"
+	@echo "  lint         - Run shellcheck"
+	@echo ""
+	@echo "Per-image targets (example for 17-3.5/bullseye):"
+	@echo "  build-17-3.5/bullseye"
+	@echo "  test-17-3.5/bullseye"
+	@echo "  push-17-3.5/bullseye"
+	@echo ""
+	@echo "Discovered images:"
+	@for dir in $(DOCKERFILE_DIRS); do \
+		echo "  $$dir  ->  $$(cat $$dir/tags 2>/dev/null)"; \
+	done
+
+
+.PHONY: generate build test test-prepare push check_version lint help \
+	$(foreach dir,$(DOCKERFILE_DIRS),build-$(dir)) \
+	$(foreach dir,$(DOCKERFILE_DIRS),test-$(dir)) \
+	$(foreach dir,$(DOCKERFILE_DIRS),push-$(dir))

@@ -1,11 +1,11 @@
 #
-# NOTE: THIS DOCKERFILE IS GENERATED VIA "make update"! PLEASE DO NOT EDIT IT DIRECTLY.
+# NOTE: THIS DOCKERFILE IS GENERATED VIA "apply-templates.sh"! PLEASE DO NOT EDIT IT DIRECTLY.
 #
 
-FROM docker.io/postgres:14-bullseye
+FROM docker.io/postgres:15-bullseye
 
 LABEL maintainer="PostGIS Project - https://postgis.net" \
-      org.opencontainers.image.description="PostGIS 3.5.2+dfsg-1.pgdg110+1 spatial database extension with PostgreSQL 14 bullseye" \
+      org.opencontainers.image.description="PostGIS 3.5.2+dfsg-1.pgdg110+1 spatial database extension with PostgreSQL 15 bullseye" \
       org.opencontainers.image.source="https://github.com/postgis/docker-postgis"
 
 ENV POSTGIS_MAJOR=3

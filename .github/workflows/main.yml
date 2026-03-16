@@ -2,136 +2,191 @@ name: Docker PostGIS CI
 
 on:
   push:
+    branches: [v2-multi-arch, master]
   pull_request:
   schedule:
     - cron: '15 5 * * 1'
+  workflow_dispatch:
 
 defaults:
   run:
     shell: bash
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
-
-  make-docker-images:
-    strategy:
-      matrix:
-        runner-platform: ['ubuntu-24.04', 'ubuntu-24.04-arm']
-        postgres: [13, 14, 15, 16, 17 ]
-        postgis: ['3.5']
-        variant: [default, alpine]
-        include:
-          - postgres: 16
-            postgis: master
-            variant: default
-            runner-platform: 'ubuntu-24.04'
-          - postgres: 17
-            postgis: master
-            variant: default
-            runner-platform: 'ubuntu-24.04'
-          - postgres: 16
-            postgis: master
-            variant: default
-            runner-platform: 'ubuntu-24.04-arm'
-          - postgres: 17
-            postgis: master
-            variant: default
-            runner-platform: 'ubuntu-24.04-arm'
-          - postgres: 17
-            postgis: '3.6'
-            variant: alpine
-            runner-platform: 'ubuntu-24.04'
-          - postgres: 17
-            postgis: '3.6'
-            variant: alpine
-            runner-platform: 'ubuntu-24.04-arm'
-          - postgres: 18
-            postgis: '3.6'
-            variant: alpine
-            runner-platform: 'ubuntu-24.04'
-          - postgres: 18
-            postgis: '3.6'
-            variant: alpine
-            runner-platform: 'ubuntu-24.04-arm'
-          - postgres: 18
-            postgis: '3.6'
-            variant: default
-            runner-platform: 'ubuntu-24.04'
-          - postgres: 18
-            postgis: '3.6'
-            variant: default
-            runner-platform: 'ubuntu-24.04-arm'
-
-    name: ${{ matrix.postgres }}-${{ matrix.postgis }}-${{ matrix.variant }} ${{ matrix.runner-platform }} - Build Docker image
-    runs-on: ${{ matrix.runner-platform }}
-    continue-on-error: ${{ matrix.postgis == 'master' }}
-    env:
-      VERSION: ${{ matrix.postgres }}-${{ matrix.postgis }}
-      VARIANT: ${{ matrix.variant }}
-      DOCKER_APT_PKG_VER: '5:29.2.1-1~ubuntu.24.04~noble'
-
+  # ---------------------------------------------------------------------------
+  # Job 1: Generate build matrix from versions.json
+  # ---------------------------------------------------------------------------
+  generate-matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      build-matrix: ${{ steps.matrix.outputs.build }}
+      manifest-matrix: ${{ steps.matrix.outputs.manifest }}
     steps:
-    - name: Install/config specific version of Docker packages
-      run: |
-        echo "***** Removing any currently installed conflicting packages..."
-        for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove $pkg; done
-        echo "***** Setting up Docker's APT repo..."
-        sudo apt-get update
-        sudo apt-get install ca-certificates curl
-        sudo install -m 0755 -d /etc/apt/keyrings
-        sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-        sudo chmod a+r /etc/apt/keyrings/docker.asc
-        echo \
-          "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-          $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
-          sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-          sudo apt-get update
-        echo "*****  Check available docker-ce versions ."
-        sudo apt policy docker-ce
-        echo "***** Installing Docker packages..."
-        sudo apt-get install docker-ce=${{ env.DOCKER_APT_PKG_VER }} docker-ce-cli=${{ env.DOCKER_APT_PKG_VER }} containerd.io docker-buildx-plugin docker-compose-plugin
-        echo "***** Verifying initial Docker installation..."
-        docker run hello-world
-        echo "***** Displaying Docker information..."
-        docker info
-        echo "***** Configuring Docker for containerd image store and builder keepStorage..."
-        echo "{ \"features\": { \"containerd-snapshotter\": true }}" | sudo tee /etc/docker/daemon.json
-        echo $'{
-          "features": {
-            "containerd-snapshotter": true
-          },
-          "builder": {
-            "gc": {
-              "defaultKeepStorage": "20GB",
-              "enabled": true
+      - uses: actions/checkout@v4
+
+      - name: Generate matrices from versions.json
+        id: matrix
+        run: |
+          # Build matrix: one entry per (version, variant, arch)
+          BUILD=$(jq -c '[
+            to_entries[] | .key as $ver | .value |
+            to_entries[] | .key as $var | .value |
+            (.arch | split(" "))[] as $arch |
+            {
+              version: $ver,
+              variant: $var,
+              arch: $arch,
+              tags: .tags,
+              template: .template,
+              is_master: ($ver | endswith("-master"))
             }
-          }
-        }' | sudo tee /etc/docker/daemon.json
-        sudo systemctl restart docker
-        docker info -f '{{ .DriverStatus }}'
+          ]' versions.json)
 
-    - name: Load binfmt platforms for QEMU
-      run: |
-        docker run --privileged --rm tonistiigi/binfmt --install all
-        docker images --tree
+          # Manifest matrix: one entry per (version, variant) that has multiple arches
+          MANIFEST=$(jq -c '[
+            to_entries[] | .key as $ver | .value |
+            to_entries[] | .key as $var | .value |
+            select((.arch | split(" ") | length) > 1) |
+            {
+              version: $ver,
+              variant: $var,
+              tags: .tags
+            }
+          ] | unique_by(.version + "-" + .variant)' versions.json)
 
-    - name: Checkout source
-      uses: actions/checkout@v4
+          echo "build={\"include\":$BUILD}" >> "$GITHUB_OUTPUT"
+          echo "manifest={\"include\":$MANIFEST}" >> "$GITHUB_OUTPUT"
 
-    - name: Build docker image for ${{ env.VERSION }} ${{ env.VARIANT }}
-      run: make test
+          echo "Build matrix entries: $(echo "$BUILD" | jq length)"
+          echo "Manifest entries: $(echo "$MANIFEST" | jq length)"
 
-    - name: Login to dockerhub
-      uses: docker/login-action@v3
-      if: ${{ (github.repository == 'postgis/docker-postgis') && (github.ref == 'refs/heads/master') && (github.event_name != 'pull_request') }}
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+  # ---------------------------------------------------------------------------
+  # Job 2: Build and push per-architecture images
+  # ---------------------------------------------------------------------------
+  build:
+    needs: generate-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.build-matrix) }}
+    name: ${{ matrix.version }}/${{ matrix.variant }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    continue-on-error: ${{ matrix.is_master }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Push docker image to dockerhub
-      # !!!! ONLY push the images when built on ubuntu-24.04 x86 runner for now, NOT for ubuntu-24.04-arm runners
-      if: ${{ (github.repository == 'postgis/docker-postgis') && (github.ref == 'refs/heads/master') && (github.event_name != 'pull_request') && ( matrix.runner-platform == 'ubuntu-24.04' ) }}
-      env:
-        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-        DOCKERHUB_ACCESS_TOKEN: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
-      run: make push
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image metadata
+        id: meta
+        run: |
+          REPO="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          REPO=$(echo "$REPO" | tr '[:upper:]' '[:lower:]')
+          echo "repo=${REPO}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.version }}/${{ matrix.variant }}
+          platforms: linux/${{ matrix.arch }}
+          push: ${{ github.event_name != 'pull_request' }}
+          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true', steps.meta.outputs.repo) || '' }}
+          cache-from: type=gha,scope=${{ matrix.version }}-${{ matrix.variant }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.version }}-${{ matrix.variant }}-${{ matrix.arch }}
+
+      - name: Export digest
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.version }}-${{ matrix.variant }}-${{ matrix.arch }}
+          path: /tmp/digests/
+          if-no-files-found: error
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Create and push multi-arch manifests
+  # ---------------------------------------------------------------------------
+  manifest:
+    if: github.event_name != 'pull_request'
+    needs: [generate-matrix, build]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.manifest-matrix) }}
+    name: manifest ${{ matrix.version }}/${{ matrix.variant }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download amd64 digest
+        uses: actions/download-artifact@v4
+        with:
+          name: digest-${{ matrix.version }}-${{ matrix.variant }}-amd64
+          path: /tmp/digests/
+
+      - name: Download arm64 digest
+        uses: actions/download-artifact@v4
+        with:
+          name: digest-${{ matrix.version }}-${{ matrix.variant }}-arm64
+          path: /tmp/digests/
+
+      - name: Create and push manifests
+        run: |
+          REPO="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          REPO=$(echo "$REPO" | tr '[:upper:]' '[:lower:]')
+
+          # Collect digests
+          SOURCES=""
+          for f in /tmp/digests/*; do
+            SOURCES="${SOURCES} ${REPO}@sha256:$(basename $f)"
+          done
+
+          # Create a manifest for each tag
+          IFS=' ' read -ra TAGS <<< "${{ matrix.tags }}"
+          TAG_ARGS=""
+          for tag in "${TAGS[@]}"; do
+            TAG_ARGS="${TAG_ARGS} --tag ${REPO}:${tag}"
+          done
+
+          echo "Creating manifests for tags: ${TAGS[*]}"
+          docker buildx imagetools create ${TAG_ARGS} ${SOURCES}
+
+      - name: Inspect primary tag
+        run: |
+          REPO="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          REPO=$(echo "$REPO" | tr '[:upper:]' '[:lower:]')
+          FIRST_TAG=$(echo "${{ matrix.tags }}" | cut -d' ' -f1)
+          docker buildx imagetools inspect "${REPO}:${FIRST_TAG}"

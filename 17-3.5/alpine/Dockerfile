@@ -1,5 +1,5 @@
 #
-# NOTE: THIS DOCKERFILE IS GENERATED VIA "make update"! PLEASE DO NOT EDIT IT DIRECTLY.
+# NOTE: THIS DOCKERFILE IS GENERATED VIA "apply-templates.sh"! PLEASE DO NOT EDIT IT DIRECTLY.
 #
 ARG BASE_IMAGE=postgres:17-alpine3.22
 FROM ${BASE_IMAGE}
@@ -78,8 +78,8 @@ RUN set -eux \
     && mkdir /tempdb \
     && chown -R postgres:postgres /tempdb \
     && su postgres -c 'pg_ctl -D /tempdb init' \
-    && su postgres -c 'pg_ctl -D /tempdb -c -l /tmp/logfile -o '-F' start ' \
-    && cd regress \
+    && su postgres -c 'pg_ctl -D /tempdb -c -l /tmp/logfile -o "-F --jit=off" start ' \
+    && cd /usr/src/postgis/regress \
     && make -j${NPROC:-$(nproc)} check RUNTESTFLAGS="--extension --verbose" PGUSER=postgres \
     \
     && su postgres -c 'psql    -c "CREATE EXTENSION IF NOT EXISTS postgis;"' \

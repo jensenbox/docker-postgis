@@ -1,0 +1,150 @@
+{
+  "13-3.5": {
+    "bullseye": {
+      "PG_MAJOR": "13",
+      "POSTGIS_MAJOR": "3",
+      "POSTGIS_VERSION": "3.5.2+dfsg-1.pgdg110+1",
+      "template": "Dockerfile.debian.template",
+      "arch": "amd64 arm64",
+      "tags": "13-3.5-bullseye 13-3.5"
+    },
+    "alpine": {
+      "PG_MAJOR": "13",
+      "POSTGIS_VERSION": "3.5.5",
+      "POSTGIS_SHA256": "fc3408c474662b5354c9569cfbd18172f2f4818c09945725b8d0089169925fb1",
+      "template": "Dockerfile.alpine.template",
+      "arch": "amd64 arm64",
+      "tags": "13-3.5-alpine"
+    }
+  },
+  "14-3.5": {
+    "bullseye": {
+      "PG_MAJOR": "14",
+      "POSTGIS_MAJOR": "3",
+      "POSTGIS_VERSION": "3.5.2+dfsg-1.pgdg110+1",
+      "template": "Dockerfile.debian.template",
+      "arch": "amd64 arm64",
+      "tags": "14-3.5-bullseye 14-3.5"
+    },
+    "alpine": {
+      "PG_MAJOR": "14",
+      "POSTGIS_VERSION": "3.5.5",
+      "POSTGIS_SHA256": "fc3408c474662b5354c9569cfbd18172f2f4818c09945725b8d0089169925fb1",
+      "template": "Dockerfile.alpine.template",
+      "arch": "amd64 arm64",
+      "tags": "14-3.5-alpine"
+    }
+  },
+  "15-3.5": {
+    "bullseye": {
+      "PG_MAJOR": "15",
+      "POSTGIS_MAJOR": "3",
+      "POSTGIS_VERSION": "3.5.2+dfsg-1.pgdg110+1",
+      "template": "Dockerfile.debian.template",
+      "arch": "amd64 arm64",
+      "tags": "15-3.5-bullseye 15-3.5"
+    },
+    "alpine": {
+      "PG_MAJOR": "15",
+      "POSTGIS_VERSION": "3.5.5",
+      "POSTGIS_SHA256": "fc3408c474662b5354c9569cfbd18172f2f4818c09945725b8d0089169925fb1",
+      "template": "Dockerfile.alpine.template",
+      "arch": "amd64 arm64",
+      "tags": "15-3.5-alpine"
+    }
+  },
+  "16-3.5": {
+    "bullseye": {
+      "PG_MAJOR": "16",
+      "POSTGIS_MAJOR": "3",
+      "POSTGIS_VERSION": "3.5.2+dfsg-1.pgdg110+1",
+      "template": "Dockerfile.debian.template",
+      "arch": "amd64 arm64",
+      "tags": "16-3.5-bullseye 16-3.5"
+    },
+    "alpine": {
+      "PG_MAJOR": "16",
+      "POSTGIS_VERSION": "3.5.5",
+      "POSTGIS_SHA256": "fc3408c474662b5354c9569cfbd18172f2f4818c09945725b8d0089169925fb1",
+      "template": "Dockerfile.alpine.template",
+      "arch": "amd64 arm64",
+      "tags": "16-3.5-alpine"
+    }
+  },
+  "17-3.5": {
+    "bullseye": {
+      "PG_MAJOR": "17",
+      "POSTGIS_MAJOR": "3",
+      "POSTGIS_VERSION": "3.5.2+dfsg-1.pgdg110+1",
+      "template": "Dockerfile.debian.template",
+      "arch": "amd64 arm64",
+      "tags": "17-3.5-bullseye 17-3.5 latest"
+    },
+    "alpine": {
+      "PG_MAJOR": "17",
+      "POSTGIS_VERSION": "3.5.5",
+      "POSTGIS_SHA256": "fc3408c474662b5354c9569cfbd18172f2f4818c09945725b8d0089169925fb1",
+      "template": "Dockerfile.alpine.template",
+      "arch": "amd64 arm64",
+      "tags": "17-3.5-alpine alpine"
+    }
+  },
+  "17-3.6": {
+    "alpine": {
+      "PG_MAJOR": "17",
+      "POSTGIS_VERSION": "3.6.2",
+      "POSTGIS_SHA256": "607a4d21c017e5283e15d2d977c9b7f575ddfc672afdee81fc84a2d823db4ba5",
+      "template": "Dockerfile.alpine.template",
+      "arch": "amd64 arm64",
+      "tags": "17-3.6-alpine"
+    }
+  },
+  "18-3.6": {
+    "trixie": {
+      "PG_MAJOR": "18",
+      "POSTGIS_MAJOR": "3",
+      "POSTGIS_VERSION": "3.6.2+dfsg-1.pgdg13+1",
+      "template": "Dockerfile.debian.template",
+      "arch": "amd64 arm64",
+      "tags": "18-3.6-trixie 18-3.6"
+    },
+    "alpine": {
+      "PG_MAJOR": "18",
+      "POSTGIS_VERSION": "3.6.2",
+      "POSTGIS_SHA256": "607a4d21c017e5283e15d2d977c9b7f575ddfc672afdee81fc84a2d823db4ba5",
+      "template": "Dockerfile.alpine.template",
+      "arch": "amd64 arm64",
+      "tags": "18-3.6-alpine"
+    }
+  },
+  "16-master": {
+    "bullseye": {
+      "PG_MAJOR": "16",
+      "POSTGIS_GIT_HASH": "6d729904766367e513963cbb330b58400d12025c",
+      "CGAL_GIT_HASH": "d4633ca2ab4ed8ffe57c9a5dc12d5588af95c5bd",
+      "SFCGAL_GIT_HASH": "78a0496bc3f57a698f2d30affbd544be60b44fde",
+      "PROJ_GIT_HASH": "55707ca0862d5f2995759a3a1cd8bfec1f6a2ce9",
+      "GDAL_GIT_HASH": "859a85835430e594c99d3800ea99cb22eaabc4e9",
+      "GEOS_GIT_HASH": "a180ae12ad185da32746e665ee068b63b1ac4644",
+      "BOOST_VERSION": "1.74.0",
+      "template": "Dockerfile.master.template",
+      "arch": "amd64 arm64",
+      "tags": "16-master-bullseye 16-master"
+    }
+  },
+  "17-master": {
+    "bullseye": {
+      "PG_MAJOR": "17",
+      "POSTGIS_GIT_HASH": "6d729904766367e513963cbb330b58400d12025c",
+      "CGAL_GIT_HASH": "d4633ca2ab4ed8ffe57c9a5dc12d5588af95c5bd",
+      "SFCGAL_GIT_HASH": "78a0496bc3f57a698f2d30affbd544be60b44fde",
+      "PROJ_GIT_HASH": "55707ca0862d5f2995759a3a1cd8bfec1f6a2ce9",
+      "GDAL_GIT_HASH": "859a85835430e594c99d3800ea99cb22eaabc4e9",
+      "GEOS_GIT_HASH": "a180ae12ad185da32746e665ee068b63b1ac4644",
+      "BOOST_VERSION": "1.74.0",
+      "template": "Dockerfile.master.template",
+      "arch": "amd64 arm64",
+      "tags": "17-master-bullseye 17-master"
+    }
+  }
+}
