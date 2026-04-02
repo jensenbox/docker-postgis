@@ -12,6 +12,7 @@ LABEL maintainer="PostGIS Project - https://postgis.net" \
 
 ENV POSTGIS_VERSION=3.5.5
 ENV POSTGIS_SHA256=fc3408c474662b5354c9569cfbd18172f2f4818c09945725b8d0089169925fb1
+ENV PGVECTOR_VERSION=0.8.0
 
 RUN set -eux \
     && apk add --no-cache --virtual .fetch-deps \
@@ -67,6 +68,12 @@ RUN set -eux \
     && make -j${NPROC:-$(nproc)} \
     && make install \
     \
+# build pgvector
+    && git clone --branch "v${PGVECTOR_VERSION}" --depth 1 https://github.com/pgvector/pgvector.git /usr/src/pgvector \
+    && cd /usr/src/pgvector \
+    && make -j${NPROC:-$(nproc)} \
+    && make install \
+    \
 # This section is for refreshing the proj data for the regression tests.
 # It serves as a workaround for an issue documented at https://trac.osgeo.org/postgis/ticket/5316
 # This increases the Docker image size by about 1 MB.
@@ -90,6 +97,7 @@ RUN set -eux \
     && su postgres -c 'psql    -c "CREATE EXTENSION IF NOT EXISTS address_standardizer_data_us;"' \
     && su postgres -c 'psql    -c "CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder;"' \
     && su postgres -c 'psql    -c "CREATE EXTENSION IF NOT EXISTS postgis_topology;"' \
+    && su postgres -c 'psql    -c "CREATE EXTENSION IF NOT EXISTS vector;"' \
     && su postgres -c 'psql -t -c "SELECT version();"'              >> /_pgis_full_version.txt \
     && su postgres -c 'psql -t -c "SELECT PostGIS_Full_Version();"' >> /_pgis_full_version.txt \
     && su postgres -c 'psql -t -c "\dx"' >> /_pgis_full_version.txt \
@@ -117,6 +125,7 @@ RUN set -eux \
 # clean
     && cd / \
     && rm -rf /usr/src/postgis \
+    && rm -rf /usr/src/pgvector \
     && apk del .fetch-deps .build-deps \
 # At the end of the build, we print the collected information
 # from the '/_pgis_full_version.txt' file. This is for experimental and internal purposes.

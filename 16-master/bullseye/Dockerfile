@@ -394,6 +394,11 @@ RUN set -ex \
         --enable-lto \
     && make -j${NPROC:-$(nproc)} \
     && make install \
+# build pgvector
+    && git clone --branch v0.8.0 --depth 1 https://github.com/pgvector/pgvector.git /usr/src/pgvector \
+    && cd /usr/src/pgvector \
+    && make -j${NPROC:-$(nproc)} \
+    && make install \
 # refresh proj data - workarounds: https://trac.osgeo.org/postgis/ticket/5316
     && projsync --system-directory --file ch_swisstopo_CHENyx06_ETRS \
     && projsync --system-directory --file us_noaa_eshpgn \
@@ -416,6 +421,7 @@ RUN set -ex \
     && su postgres -c 'psql    -c "CREATE EXTENSION IF NOT EXISTS address_standardizer_data_us;"' \
     && su postgres -c 'psql    -c "CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder;"' \
     && su postgres -c 'psql    -c "CREATE EXTENSION IF NOT EXISTS postgis_topology;"' \
+    && su postgres -c 'psql    -c "CREATE EXTENSION IF NOT EXISTS vector;"' \
     && su postgres -c 'psql -t -c "SELECT version();"' >> /_pgis_full_version.txt \
     && su postgres -c 'psql -t -c "SELECT PostGIS_Full_Version();"' >> /_pgis_full_version.txt \
     && su postgres -c 'psql -t -c "\dx"' >> /_pgis_full_version.txt \
@@ -427,6 +433,7 @@ RUN set -ex \
 # clean
     && cd / \
     && rm -rf /usr/src/postgis \
+    && rm -rf /usr/src/pgvector \
     && apt-get purge -y --autoremove \
       autoconf \
       automake \
